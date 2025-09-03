@@ -25,17 +25,22 @@ if (!File.Exists(inputPath))
 var words = await FileInputReader.ReadWordsAsync(inputPath);
 var dict = words.ToImmutableHashSet(StringComparer.Ordinal);
 
-// filter target words from input
-var targets = words.Where(w => w.Length == targetLength).ToArray();
+// define targets words
+var targets = dict.Where(w => w.Length == targetLength)
+                  .OrderBy(w => w, StringComparer.Ordinal);
 
 // find and print compositions
 var finder = new WordCompositionFinder(dict);
-foreach (var target in targets.OrderBy(t => t, StringComparer.Ordinal))
+
+foreach (var target in targets)
 {
-    foreach (var parts in finder.SplitIntoKnownWords(target, minParts, maxParts))
-    {
-        Console.WriteLine($"{string.Join("+", parts)}={target}");
-    }
+    var lines = finder.Find(target, minParts, maxParts)
+                      .Select(parts => string.Join("+", parts))
+                      .Distinct()
+                      .OrderBy(s => s, StringComparer.Ordinal);
+
+    foreach (var line in lines)
+        Console.WriteLine($"{line}={target}");
 }
 
 Console.WriteLine("=== end execution ===");

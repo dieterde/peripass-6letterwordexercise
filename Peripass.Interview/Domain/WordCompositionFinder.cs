@@ -6,54 +6,47 @@ public sealed class WordCompositionFinder
 
     public WordCompositionFinder(ISet<string> dictionary)
     {
-        _dict = dictionary;
+        _dict = dictionary ?? throw new ArgumentNullException(nameof(dictionary));
     }
 
-    public IEnumerable<IReadOnlyList<string>> SplitIntoKnownWords(string target, int minParts, int? maxParts)
+    public IEnumerable<IReadOnlyList<string>> Find(string target, int minParts = 2, int? maxParts = null)
     {
-        if (!_dict.Contains(target))
-            yield break;
+        if (string.IsNullOrWhiteSpace(target)) yield break;
+        if (!_dict.Contains(target)) yield break;
 
-        var memo = new Dictionary<(int start, int? remain), List<List<string>>>();
+        var current = new List<string>(capacity: 6);
 
-        foreach (var parts in FindCompositions(target, 0, maxParts, memo))
+        foreach (var parts in Enumerate(target, 0, 0, current, maxParts))
         {
             if (parts.Count >= minParts)
                 yield return parts;
         }
     }
 
-    private IEnumerable<List<string>> FindCompositions(string target, int start, int? remaining, Dictionary<(int start, int? remain), 
-                                                       List<List<string>>> memo)
+    private IEnumerable<IReadOnlyList<string>> Enumerate(string target, int start, int usedParts, List<string> current,
+                                                         int? maxParts)
     {
-        var key = (start, remaining);
-        if (memo.TryGetValue(key, out var cached)) return cached;
-
-        var results = new List<List<string>>();
-
         if (start == target.Length)
         {
-            results.Add(new List<string>());
-        }
-        else if (remaining is null || remaining.Value > 0)
-        {
-            for (int end = start + 1; end <= target.Length; end++)
-            {
-                var piece = target.AsSpan(start, end - start).ToString();
-                if (_dict.Contains(piece))
-                {
-                    var nextRemain = remaining is null ? null : remaining - 1;
-                    foreach (var tail in FindCompositions(target, end, nextRemain, memo))
-                    {
-                        var combined = new List<string>(1 + tail.Count) { piece };
-                        combined.AddRange(tail);
-                        results.Add(combined);
-                    }
-                }
-            }
+            yield return current.ToArray();
+            yield break;
         }
 
-        memo[key] = results;
-        return results;
+        if (maxParts.HasValue && usedParts >= maxParts.Value)
+            yield break;
+
+        for (int end = start + 1; end <= target.Length; end++)
+        {
+            var piece = target.Substring(start, end - start);
+            if (_dict.Contains(piece))
+            {
+                current.Add(piece);
+
+                foreach (var result in Enumerate(target, end, usedParts + 1, current, maxParts))
+                    yield return result;
+
+                current.RemoveAt(current.Count - 1);
+            }
+        }
     }
 }
